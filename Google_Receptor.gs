@@ -11,12 +11,58 @@ const HOJA_RESUMEN     = 'Resumen';
 const TZ               = 'America/Caracas';
 
 // ============================================================
-// PUNTO DE ENTRADA GET (mantiene la web app accesible)
+// PUNTO DE ENTRADA GET
+// Sin parámetros  → ping de estado
+// ?accion=bajar   → devuelve todos los movimientos y tasas para
+//                   que el iPhone reconstruya su localStorage
 // ============================================================
-function doGet() {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, msg: 'MiFondo API activa' }))
-    .setMimeType(ContentService.MimeType.JSON);
+function doGet(e) {
+  const accion = e && e.parameter && e.parameter.accion;
+
+  if (accion === 'bajar') {
+    try {
+      const ss   = SpreadsheetApp.openById(SHEET_ID);
+      const hMov = ss.getSheetByName(HOJA_MOVIMIENTOS);
+      const hRes = ss.getSheetByName(HOJA_RESUMEN);
+
+      const movimientos = [];
+      if (hMov && hMov.getLastRow() > 1) {
+        const datos = hMov.getDataRange().getValues();
+        for (let i = 1; i < datos.length; i++) {
+          const fila = datos[i];
+          if (!fila[0]) continue;
+          movimientos.push({
+            fechaStr:  fmtFecha(fila[0]),
+            tipo:      fila[2],
+            categoria: fila[3],
+            concepto:  fila[4],
+            montoBs:   parseFloat(fila[5]) || 0,
+            montoDolar:parseFloat(fila[6]) || 0,
+            timestamp: fila[7] instanceof Date ? fila[7].getTime() : 0
+          });
+        }
+      }
+
+      const tasas = [];
+      if (hRes && hRes.getLastRow() > 1) {
+        const datos = hRes.getDataRange().getValues();
+        for (let i = 1; i < datos.length; i++) {
+          if (!datos[i][0]) continue;
+          tasas.push({
+            fechaStr: fmtFecha(datos[i][0]),
+            tasa:     parseFloat(datos[i][1]) || 0
+          });
+        }
+      }
+
+      return jsonResp({ ok: true, movimientos, tasas });
+    } catch(err) {
+      return jsonResp({ ok: false, error: err.message });
+    }
+  }
+
+  // Ping por defecto
+  return jsonResp({ ok: true, msg: 'MiFondo API activa' });
 }
 
 // ============================================================
