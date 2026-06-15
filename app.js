@@ -532,25 +532,22 @@ async function sincronizarSilencioso() {
   } catch { /* silencioso */ }
 }
 
-// ── POST a Google Apps Script sin error 405 ─────────────────
-// GAS exige que el POST llegue como application/x-www-form-urlencoded
-// con el payload en el campo "payload". Usar fetch con ese Content-Type
-// no dispara preflight CORS y GAS lo acepta vía doPost(e).
+// ── Envío a Google Apps Script — usa GET para evitar el 405 en Safari ──
+// GAS redirige POSTs con 302 y Safari convierte el redirect en GET → 405.
+// Solución: enviamos todo como parámetro "payload" en la query string via GET.
+// El límite de URL en GAS es ~8KB, más que suficiente para un lote típico.
 async function postAGAS(pendientes) {
-  const body = 'payload=' + encodeURIComponent(JSON.stringify({ lote: pendientes }));
-  const resp = await fetch(WEBAPP_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body
-  });
-  // GAS redirige con 302 tras ejecutar doPost — fetch sigue la redirección
-  // y devuelve 200 con el JSON. Si llega cualquier 2xx lo tomamos como OK.
-  if (!resp.ok && resp.status !== 302) throw new Error('HTTP ' + resp.status);
+  const json    = JSON.stringify({ lote: pendientes });
+  const encoded = encodeURIComponent(json);
+  const url     = WEBAPP_URL + '?accion=subir&payload=' + encoded;
+
+  const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
   try {
-    const json = await resp.json();
-    return json.ok !== false;   // si el servidor devuelve {ok:false} igual falla
+    const data = await resp.json();
+    return data.ok !== false;
   } catch {
-    return true;  // GAS a veces responde con redirect sin body — igual se guardó
+    return true; // GAS a veces no devuelve body en redirect — igual procesó
   }
 }
 
@@ -563,8 +560,42 @@ function marcarComoSincronizados() {
 }
 
 // ============================================================
-// HELPERS UI
+// DIAGNÓSTICO — llamar desde la consola del iPhone:
+//   probarConexion()
+// Te muestra exactamente qué devuelve GAS y el status HTTP.
+// Borrá esta función una vez que todo funcione.
 // ============================================================
+async function probarConexion() {
+  toast('Probando conexión...', false);
+  const pasos = [];
+  try {
+    // Paso 1: ping básico
+    const r1 = await fetch(WEBAPP_URL, { method: 'GET', cache: 'no-store' });
+    pasos.push('Ping status: ' + r1.status + ' / redirected: ' + r1.redirected + ' / url final: ' + r1.url);
+    const t1 = await r1.text();
+    pasos.push('Ping body: ' + t1.substring(0, 120));
+
+    // Paso 2: bajar datos
+    const r2 = await fetch(WEBAPP_URL + '?accion=bajar', { method: 'GET', cache: 'no-store' });
+    pasos.push('Bajar status: ' + r2.status);
+    const t2 = await r2.text();
+    pasos.push('Bajar body: ' + t2.substring(0, 200));
+
+    // Paso 3: subir prueba
+    const testPayload = encodeURIComponent(JSON.stringify({ lote: [] }));
+    const r3 = await fetch(WEBAPP_URL + '?accion=subir&payload=' + testPayload, { method: 'GET', cache: 'no-store' });
+    pasos.push('Subir status: ' + r3.status);
+    const t3 = await r3.text();
+    pasos.push('Subir body: ' + t3.substring(0, 120));
+
+  } catch(err) {
+    pasos.push('ERROR: ' + err.message);
+  }
+  // Mostrar en alert (visible en iPhone)
+  alert(pasos.join('\n\n'));
+}
+
+
 function fmt(n) { return Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function mostrarSpin(msg) { document.getElementById('spinMsg').textContent=msg; document.getElementById('spin').classList.add('show'); }
 function ocultarSpin()    { document.getElementById('spin').classList.remove('show'); }
