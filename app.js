@@ -1,7 +1,7 @@
 // ============================================================
 // CONFIGURACIÓN — Pegá aquí la URL de tu Web App de Google
 // ============================================================
-const WEBAPP_URL = 'PEGAR_AQUI_LA_URL_DE_TU_WEBAPP_DE_GOOGLE';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwy2Vs5gdbXO_XQXKdcZf7SKg4VedmJr5bNEGypDNLk4rTI63jw47oji4ntgSfbafPJpw/exec';
 
 // ============================================================
 // CONSTANTES DE NEGOCIO
