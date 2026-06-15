@@ -67,23 +67,16 @@ function doGet(e) {
 
 // ============================================================
 // PUNTO DE ENTRADA POST — Receptor principal del iPhone
-// El iPhone envía: payload=<JSON url-encoded>
-// donde el JSON tiene: { lote: [ ...items ] }
+// Recibe: { lote: [ ...items ] }
+// Cada item tiene: { accion, fechaStr, ... }
+//   accion = 'tasa'    → { fechaStr, tasa }
+//   accion = 'agregar' → { fechaStr, tipo, categoria, concepto, montoBs, montoDolar, tasa }
+//   accion = 'editar'  → { fechaStr, ts, nuevoMonto, esDolar, concepto }
+//   accion = 'eliminar'→ { fechaStr, ts, concepto }
 // ============================================================
 function doPost(e) {
   try {
-    // Leer el campo "payload" enviado como application/x-www-form-urlencoded
-    let raw;
-    if (e.parameter && e.parameter.payload) {
-      raw = e.parameter.payload;
-    } else if (e.postData && e.postData.contents) {
-      // Fallback: intentar leer body crudo (text/plain o application/json)
-      raw = e.postData.contents;
-    } else {
-      return jsonResp({ ok: false, error: 'Sin datos recibidos' });
-    }
-
-    const payload = JSON.parse(raw);
+    const payload = JSON.parse(e.postData.contents);
     const lote    = payload.lote || [];
 
     if (!Array.isArray(lote) || lote.length === 0) {

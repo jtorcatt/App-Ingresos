@@ -498,6 +498,7 @@ async function sincronizar() {
   if (!hayInternet()) { toast('Sin conexión', true); return; }
   const pendientes = obtenerPendientes();
   if (pendientes.length===0) {
+    // Si no hay pendientes, refrescar desde Sheets
     await descargarDesdSheets();
     cargarDia();
     toast('Todo actualizado ✓');
@@ -508,12 +509,19 @@ async function sincronizar() {
   document.getElementById('syncTxt').textContent='Sincronizando...';
   mostrarSpin('Sincronizando '+pendientes.length+' registro(s)...');
   try {
-    const ok = await postAGAS(pendientes);
-    if (!ok) throw new Error('No se pudo conectar con Google');
+    const resp = await fetch(WEBAPP_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ lote: pendientes })
+    });
+    if (!resp.ok) throw new Error('HTTP '+resp.status);
+    const res = await resp.json();
+    if (!res.ok) throw new Error(res.error||'Error en servidor');
     marcarComoSincronizados();
     limpiarPendientes();
     ocultarSpin();
     toast(`✓ ${pendientes.length} registro(s) subidos`);
+    // Ahora bajamos el estado actualizado de Sheets
     await descargarDesdSheets();
     cargarDia();
   } catch(err) {
@@ -523,35 +531,20 @@ async function sincronizar() {
   actualizarBtnSync();
 }
 
+// Sincronización silenciosa al cargar (sin spinner visible en toast)
 async function sincronizarSilencioso() {
   const pendientes = obtenerPendientes();
   if (pendientes.length===0) return;
   try {
-    const ok = await postAGAS(pendientes);
-    if (ok) { marcarComoSincronizados(); limpiarPendientes(); }
+    const resp = await fetch(WEBAPP_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ lote: pendientes })
+    });
+    if (!resp.ok) return;
+    const res = await resp.json();
+    if (res.ok) { marcarComoSincronizados(); limpiarPendientes(); }
   } catch { /* silencioso */ }
-}
-
-// ── POST a Google Apps Script sin error 405 ─────────────────
-// GAS exige que el POST llegue como application/x-www-form-urlencoded
-// con el payload en el campo "payload". Usar fetch con ese Content-Type
-// no dispara preflight CORS y GAS lo acepta vía doPost(e).
-async function postAGAS(pendientes) {
-  const body = 'payload=' + encodeURIComponent(JSON.stringify({ lote: pendientes }));
-  const resp = await fetch(WEBAPP_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body
-  });
-  // GAS redirige con 302 tras ejecutar doPost — fetch sigue la redirección
-  // y devuelve 200 con el JSON. Si llega cualquier 2xx lo tomamos como OK.
-  if (!resp.ok && resp.status !== 302) throw new Error('HTTP ' + resp.status);
-  try {
-    const json = await resp.json();
-    return json.ok !== false;   // si el servidor devuelve {ok:false} igual falla
-  } catch {
-    return true;  // GAS a veces responde con redirect sin body — igual se guardó
-  }
 }
 
 function marcarComoSincronizados() {
